@@ -1,0 +1,47 @@
+{
+  "apiVersion": 1,
+  "id": "modera.kanban",
+  "name": "Project board",
+  "version": "0.1.0",
+  "description": "Project requirements, agent assignment, execution and review.",
+  "author": "Modera",
+  "category": "tasks",
+  "icon": "tasks",
+  "activationScope": "global",
+  "main": "dist/index.cjs",
+  "permissions": ["storage.read", "storage.write", "runs.schedule", "runs.delegate", "runs.observe"],
+  "dependencies": [{"id": "modera.subagents", "version": "0.1.0"}],
+  "consumes": {"modera.subagents.roles": {"apiVersion": 1}},
+  "extensions": ["workbench"],
+  "frontends": {"workbench": {"root": "dist/ui", "entry": "index.html"}},
+  "locales": {"zh-CN": {"name": "项目看板", "description": "集中管理需求、智能体分配、自动执行和交付审查。"}},
+  "agentGuidance": "Use kanban_manage to track project-level requirements and delivery. Conversation TODOs are execution steps, not project requirements. Never mark a project task accepted yourself. Do not start duplicate runs or alter a task currently being executed.",
+  "tools": [{
+    "id": "kanban_manage",
+    "title": "Manage project tasks",
+    "description": "List/get/create/update project work or add comments. Agent-created tasks always enter manual backlog; the user authorizes execution in the board. Human acceptance occurs in the board. An update cannot change state, automation, or a task with an active run.",
+    "requiredPermissions": ["storage.read", "storage.write"],
+    "inputSchema": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "action": {"enum": ["list", "get", "create", "update", "comment"]},
+        "id": {"type": "string"},
+        "revision": {"type": "integer", "minimum": 0},
+        "title": {"type": "string", "maxLength": 200},
+        "description": {"type": "string", "maxLength": 50000},
+        "type": {"enum": ["requirement", "bug", "debt", "research", "document"]},
+        "priority": {"enum": ["urgent", "high", "normal", "low"]},
+        "assigneeId": {"type": "string", "maxLength": 64},
+        "reviewerId": {"type": "string", "maxLength": 64},
+        "labels": {"type": "array", "maxItems": 30, "items": {"type": "string", "maxLength": 100}},
+        "acceptanceCriteria": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 2000}},
+        "dependencyIds": {"type": "array", "maxItems": 100, "items": {"type": "string"}},
+        "parentId": {"type": "string"},
+        "iteration": {"type": "string", "maxLength": 200},
+        "milestone": {"type": "string", "maxLength": 200},
+        "text": {"type": "string", "minLength": 1, "maxLength": 10000}
+      },
+      "required": ["action"]
+    }
+  }]
+}
