@@ -6,6 +6,7 @@ import { statuses, type BoardData, type KanbanTask, type TaskStatus } from "../s
 import { ErrorNotice, IconButton, Priority, Status, moveOptions, options, priorityNames, roleName, runningStates, statusNames, taskTypes, typeNames, unique } from "./components/shared";
 import { TaskDetails } from "./components/details";
 import { TaskEditor, BoardSettingsEditor, RoleManager } from "./components/editors";
+import { TaskConversation } from "./components/task-conversation";
 import "@modera/ui/styles.css";
 import "./style.css";
 
@@ -81,6 +82,9 @@ function Kanban() {
   const newTask = (status: "backlog" | "todo" = "backlog") => { setError(""); setInitialStatus(status); setEditor("new"); };
   const editTask = (task: KanbanTask) => { setError(""); setEditor(task); };
   const common = { busy, error, act };
+  if (data?.conversationRunId) return <UiProvider className="kb-scope" density="compact" theme={snapshot?.theme?.mode ?? "light"} accent={snapshot?.theme?.accent ?? "#3978f6"} locale={zh ? "zh-CN" : "en"} style={style}>
+    {data.tasks.find(task => task.id === data.selectedTaskId) && <TaskConversation key={data.selectedTaskId} task={data.tasks.find(task => task.id === data.selectedTaskId)!} data={data} locale={snapshot?.locale ?? "zh-CN"} {...common} onError={setError} />}
+  </UiProvider>;
   return <UiProvider className="kb-scope" density="compact" theme={snapshot?.theme?.mode ?? "light"} accent={snapshot?.theme?.accent ?? "#3978f6"} locale={zh ? "zh-CN" : "en"} style={style}>
     <main className="kb-page" aria-busy={busy}>
       <header className="kb-header">

@@ -53,6 +53,10 @@ export const activate: PluginModule["activate"] = async host => {
       const created = await store.update(state => createTask(state, projectId, data)); changed(); return created;
     }
     const snapshot = taskById(await store.read(), projectId, input.id, action === "comment" ? undefined : input.revision);
+    if (action === "answerQuestions") {
+      if (author !== "user" || !Number.isInteger(input.revision) || typeof input.continueExecution !== "boolean") throw new Error("User confirmation and task revision required");
+      await engine.queue(projectId, snapshot.id, "analysis", snapshot.revision, input.continueExecution ? "execution" : undefined, false, {answers: input.answers, continueExecution: input.continueExecution}); return;
+    }
     if (action === "comment") { await store.update(state => addComment(taskById(state, projectId, input.id), input.text, author)); changed(); return; }
     if (action === "stop") { await engine.stop(projectId, snapshot.id, snapshot.revision); return; }
     if (["retry", "continue"].includes(action)) {
@@ -123,10 +127,14 @@ export const activate: PluginModule["activate"] = async host => {
       id: "modera.kanban.workbench", slot: "workbench", frontend: "workbench",
       workbench: {title: "Project board", icon: "box", order: -110, locales: {"zh-CN": {title: "项目看板"}}},
       requiredPermissions: ["storage.read", "storage.write"],
-      actions: ["refresh", "project", "create", "edit", "move", "comment", "analyze", "start", "review", "stop", "retry", "continue", "accept", "rework", "split", "archive", "restore", "delete", "settings", "saveRole", "removeRole"],
-      async act(action, context) {
+      actions: ["refresh", "project", "create", "edit", "move", "comment", "answerQuestions", "analyze", "start", "review", "stop", "retry", "continue", "accept", "rework", "split", "archive", "restore", "delete", "settings", "saveRole", "removeRole"],
+      async act(action, context, request) {
         if (!context.projectId) throw new Error("Project required");
         const input = action.id === "project" ? {id: action.value} : JSON.parse(action.value ?? "{}");
+        if (request.sessionId) {
+          const task = (await store.read()).tasks.find(item => item.projectId === context.projectId && item.runs.some(run => run.target?.sessionId === request.sessionId));
+          if (!task || (action.id !== "refresh" && task.id !== input.id) || !["answerQuestions", "start", "analyze", "stop", "comment", "refresh"].includes(action.id)) throw new Error("Action unavailable in this task conversation");
+        }
         await act(action.id, input, context.projectId);
       },
       async render(request, context) {
@@ -135,6 +143,12 @@ export const activate: PluginModule["activate"] = async host => {
         const state = await store.read(), options = await host.scheduling!.options?.(projectId);
         const data: BoardData = {projectId, tasks: state.tasks.filter(task => task.projectId === projectId), settings: state.settings.find(item => item.projectId === projectId) ?? defaultSettings(projectId), catalog: await catalog(projectId), projects: options?.projects?.filter(item => item.id === projectId).map(item => ({...item})) ?? [{id: projectId, name: projectId}], models: options?.models?.map(item => ({...item, models: [...item.models]})) ?? [], selectedTaskId: request.resource, executionAvailable: !!(host.scheduling as TaskRuntime).startRole, ...(lastError ? {error: lastError} : {})};
         data.isolatedWorkspaces = !!options && "isolatedWorkspaces" in options && options.isolatedWorkspaces === true;
+        if (request.sessionId) {
+          const task = data.tasks.find(item => item.runs.some(run => run.target?.sessionId === request.sessionId));
+          if (!task) throw new Error("Task conversation not found in this project");
+          data.selectedTaskId = task.id;
+          data.conversationRunId = task.runs.find(run => run.target?.sessionId === request.sessionId)!.id;
+        }
         return {title: request.locale.startsWith("zh") ? "项目看板" : "Project board", data, children: []};
       }
     }]

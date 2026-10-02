@@ -20,7 +20,9 @@ export interface TaskRun {
   followUp?: Phase;
   isolatedWorkspace?: boolean;
   automatic?: boolean;
+  analysis?: TaskAnalysis;
 }
+export interface TaskClarification { id: string; analysisRunId: string; answers: { question: string; answer: string }[]; createdAt: number }
 export interface TaskComment { id: string; text: string; author: "user" | "agent"; createdAt: number }
 export interface TaskActivity { id: string; kind: string; text: string; createdAt: number }
 export interface KanbanTask {
@@ -32,6 +34,7 @@ export interface KanbanTask {
   archived: boolean; createdAt: number; updatedAt: number; revision: number;
   analysis?: TaskAnalysis; activeRunId?: string; runs: TaskRun[];
   comments: TaskComment[]; activity: TaskActivity[]; blockReason?: string;
+  clarifications?: TaskClarification[];
 }
 export interface BoardSettings {
   projectId: string; autoExecute: boolean; autoReview: boolean; maxConcurrent: number;
@@ -43,5 +46,6 @@ export interface BoardData {
   projects: {id: string; name: string}[];
   models: {profileId: string; name: string; models: string[]; efforts?: Readonly<Record<string, readonly ModelSelection["reasoningEffort"][]>>}[];
   selectedTaskId?: string; executionAvailable: boolean; isolatedWorkspaces?: boolean; error?: string;
+  conversationRunId?: string;
 }
 export type TaskInput = Pick<KanbanTask, "title" | "description" | "type" | "priority" | "status" | "labels" | "assigneeId" | "reviewerId" | "dependencyIds" | "iteration" | "milestone" | "acceptanceCriteria" | "automatic"> & { parentId?: string };

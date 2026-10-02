@@ -4,6 +4,7 @@ import { Button, Combobox, Dialog, Menu, Tabs, TabsContent, TabsList, TabsTrigge
 import { Archive, ArchiveRestore, Check, CheckCircle2, FileText, GitBranch, MessageSquare, Pause, Pencil, Play, RotateCcw, Send, Sparkles, Square, Trash2, XCircle } from "lucide-react";
 import type { BoardData, KanbanTask, TaskRun, TaskStatus } from "../../src/types";
 import { ErrorNotice, Priority, Status, moveOptions, pickerOpen, roleName, runningStates, typeNames, type Action, type Translate } from "./shared";
+import { Clarification, ClarificationHistory } from "./clarification";
 
 export function TaskDetails({ task, data, locale, busy, error, act, close, edit, remove, onError, select }: { task: KanbanTask; data: BoardData; locale: string; busy: boolean; error: string; act: Action; close(): void; edit(): void; remove(): void; onError(message: string): void; select(id: string): void }) {
   const t = useLabel();
@@ -48,7 +49,9 @@ export function TaskDetails({ task, data, locale, busy, error, act, close, edit,
       </div>
       {task.status === "in_review" && !task.archived && <div className="kb-review-actions"><Button size="small" variant="outline" disabled={busy || unresolved} onClick={() => void act("accept", reference)}><Check size={14} aria-hidden />{t("验收通过", "Accept")}</Button><Button size="small" variant="outline" disabled={busy || unresolved} onClick={() => { setReworkRevision(task.revision); setFeedback(""); setRework(true); }}><RotateCcw size={14} aria-hidden />{t("要求返工", "Request rework")}</Button></div>}
       <ErrorNotice message={error} />
-      {task.blockReason && <ErrorNotice message={task.blockReason} />}
+      {task.blockReason && (!hasQuestions || task.blockReason !== task.analysis?.questions.join("\n")) && <ErrorNotice message={task.blockReason} />}
+      {hasQuestions && <Clarification key={JSON.stringify([task.id, task.analysis, task.activeRunId])} task={task} disabled={!executable} act={act} />}
+      <ClarificationHistory task={task} />
       <Tabs className="kb-detail-tabs" size="small" variant="underline" value={tab} onValueChange={setTab}>
         <TabsList aria-label={t("详情分类", "Detail sections")}><TabsTrigger value="overview">{t("详情", "Details")}</TabsTrigger><TabsTrigger value="runs" count={task.runs.length}>{t("执行", "Runs")}</TabsTrigger><TabsTrigger value="comments" count={task.comments.length}>{t("评论", "Comments")}</TabsTrigger><TabsTrigger value="activity" count={task.activity.length}>{t("动态", "Activity")}</TabsTrigger></TabsList>
         <TabsContent value="overview">
@@ -73,7 +76,7 @@ function Criteria({ items, t }: { items: string[]; t: Translate }) {
   return items.length ? <ul className="kb-criteria">{items.map((item, index) => <li key={index}><CheckCircle2 size={14} aria-hidden /><span>{item}</span></li>)}</ul> : <p className="kb-muted">{t("暂无标准", "No criteria")}</p>;
 }
 
-function RunResult({ run, locale, onError }: { run: TaskRun; locale: string; onError(message: string): void }) {
+export function RunResult({ run, locale, onError }: { run: TaskRun; locale: string; onError(message: string): void }) {
   const t = useLabel();
   const states: Record<TaskRun["state"], string> = { queued: t("排队中", "Queued"), starting: t("启动中", "Starting"), running: t("执行中", "Running"), paused: t("已暂停", "Paused"), failed: t("失败", "Failed"), interrupted: t("已中断", "Interrupted"), completed: t("已完成", "Completed"), cancelled: t("已取消", "Cancelled") };
   const phases = { analysis: t("分析", "Analysis"), execution: t("执行", "Execution"), review: t("审核", "Review") };

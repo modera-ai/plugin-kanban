@@ -71,7 +71,7 @@ async function load({ locale = "en", theme = "light", data = fixture, failLoad =
     };
   }, { data, locale, theme, failLoad, loading });
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  if (!loading && !failLoad) await expect(page.locator(".kb-project-name")).toBeVisible();
+  if (!loading && !failLoad) await expect(page.locator(data.conversationRunId ? ".kb-task-conversation" : ".kb-project-name")).toBeVisible();
 }
 async function choose(label, option, scope = page) {
   await scope.getByRole("combobox", { name: label, exact: true }).click();
@@ -80,7 +80,7 @@ async function choose(label, option, scope = page) {
 const lastAction = () => page.evaluate(() => window.__actions.at(-1));
 const expectAction = async (id, payload) => { await expect.poll(lastAction).toEqual({ id, payload }); checks++; };
 const detail = () => page.locator(".kb-detail-dialog");
-const open = async id => { await page.locator(`.kb-task:has(button[aria-label*="#${fixture.tasks.find(task => task.id === id).number}:"]) .kb-task-main`).click(); await expect(detail()).toBeVisible(); };
+const open = async id => { await page.locator(`.kb-task-main[aria-label*="#${fixture.tasks.find(task => task.id === id).number}"]`).click(); await expect(detail()).toBeVisible(); };
 const menu = async option => { await detail().getByRole("button", { name: "Task management", exact: true }).click(); await page.getByRole("menuitem", { name: option, exact: true }).click(); };
 async function screenshot(name) { await page.screenshot({ path: resolve(artifacts, `${name}.png`), fullPage: true }); }
 async function noPageOverflow() {
@@ -273,6 +273,35 @@ try {
   await load({ data: { ...fixture, tasks: [] } });
   await page.getByRole("tab", { name: "List", exact: true }).click();
   await expect(page.getByText("No tasks yet", { exact: true })).toBeVisible(); checks++;
+  const question = "请确认仅处理 generated-output/test 目录，保留项目源码、配置和 README.md。";
+  const waiting = task("todo", 2, "blocked", {analysis: {...analysis, questions: [question]}, blockReason: question, runs: [{...delivery, id: "analysis-question", phase: "analysis", analysis: {...analysis, questions: [question]}}]});
+  for (const width of [390, 900, 1440]) {
+    await page.setViewportSize({width, height: width === 390 ? 844 : 1000});
+    await load({locale: "zh-CN", data: {...fixture, tasks: [waiting]}}); await open("todo");
+    await expect(detail().getByRole("textbox", {name: question})).toBeVisible();
+    await expect(detail().getByRole("button", {name: "提交回答并重新分析"})).toBeDisabled();
+    await noPageOverflow(); await screenshot(`clarification-board-${width}`);
+    await load({locale: "zh-CN", data: {...fixture, tasks: [waiting], selectedTaskId: waiting.id, conversationRunId: "analysis-question"}});
+    await expect(page.locator(".kb-task-conversation")).toBeVisible();
+    await expect(page.locator(".kb-page")).toHaveCount(0);
+    await page.getByRole("textbox", {name: question}).fill("仅清理 generated-output/test，保留其他文件。");
+    await noPageOverflow(); await screenshot(`clarification-conversation-${width}`);
+    if (width === 390) {
+      await page.evaluate(() => {window.__failure = "Task changed; refresh and retry";});
+      await page.getByRole("button", {name: "提交回答并重新分析"}).click();
+      await expect(page.getByRole("alert")).toContainText("Task changed");
+      await expect(page.getByRole("textbox", {name: question})).toHaveValue("仅清理 generated-output/test，保留其他文件。"); checks++;
+      await page.evaluate(() => {window.__failure = "";});
+    }
+    await page.getByRole("switch", {name: "分析通过后继续执行"}).click();
+    await page.getByRole("button", {name: "提交回答并继续"}).click();
+    await expectAction("answerQuestions", {id: "todo", revision: 7, answers: ["仅清理 generated-output/test，保留其他文件。"], continueExecution: true});
+  }
+  await load({data: {...fixture, tasks: [{...waiting, activeRunId: "reanalyze"}], selectedTaskId: waiting.id, conversationRunId: "analysis-question"}});
+  await expect(page.getByRole("textbox", {name: question})).toBeDisabled(); checks++;
+  await load({data: {...fixture, tasks: [{...waiting, analysis, blockReason: undefined, clarifications: [{id: "answer-1", analysisRunId: "analysis-question", createdAt: now, answers: [{question, answer: "Only generated files"}]}]}], selectedTaskId: waiting.id, conversationRunId: "analysis-question"}});
+  await expect(page.getByText("Only generated files", {exact: true})).toBeVisible();
+  await expect(page.locator(".kb-clarification")).toHaveCount(0); checks++;
   await load({ failLoad: true }); await expect(page.getByRole("alert")).toContainText("Snapshot unavailable"); checks++;
   await load({ loading: true }); await expect(page.getByRole("status")).toContainText("正在加载");
   await expect(page.getByRole("button", { name: "新建任务", exact: true })).toBeDisabled(); checks++;

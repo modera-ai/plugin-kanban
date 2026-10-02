@@ -147,6 +147,18 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 .kb-run-state.failed, .kb-run-state.interrupted { color: var(--mu-danger); }
 .kb-run-state.completed { color: var(--mu-success); }
 .kb-run-state.running, .kb-run-state.starting { color: var(--mu-accent); }
+.kb-clarification { display: grid; gap: 14px; padding: 18px 0; border-block: 1px solid var(--mu-line); }
+.kb-clarification h3 { margin: 0; font-size: 14px; }
+.kb-clarification .mu-field-label, .kb-clarification .mu-toggle-row label { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
+.kb-clarification > button { justify-self: start; max-width: 100%; white-space: normal; }
+.kb-clarification-history { margin: 0; }
+.kb-clarification-history > div { padding: 10px 0; border-bottom: 1px solid var(--mu-line); }
+.kb-clarification-history dt { color: var(--mu-muted); font-size: 12px; overflow-wrap: anywhere; }
+.kb-clarification-history dd { margin: 6px 0 0; }
+.kb-task-conversation { height: 100%; overflow: auto; padding: 20px; box-sizing: border-box; }
+.kb-task-conversation > header { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.kb-task-conversation h1 { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; margin: 0; min-width: 0; }
+.kb-task-conversation .kb-detail-section { margin-top: 18px; }
 .kb-run-body { padding-top: 14px; }
 .kb-run-body > .mu-button { margin-top: 8px; }
 .kb-run-body > .kb-error { margin-top: 12px; }
