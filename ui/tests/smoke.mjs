@@ -47,13 +47,14 @@ async function load({ locale = "en", theme = "light", data = fixture, failLoad =
       ready: async () => {}, snapshot: async () => { if (loading) return new Promise(() => {}); if (failLoad) throw Error("Snapshot unavailable"); return snapshot(); },
       onChanged: listener => { listeners.add(listener); return () => listeners.delete(listener); },
       onThemeChanged: listener => { themeListeners.add(listener); return () => themeListeners.delete(listener); },
-      openConversation: async id => { window.__navigation.push({ kind: "conversation", id }); },
+      openConversation: async id => { if (window.__navigationFailure) throw Error(window.__navigationFailure); window.__navigation.push({ kind: "conversation", id }); },
       openFile: async id => { window.__navigation.push({ kind: "file", id }); }, copyText: async id => { window.__navigation.push({ kind: "copy", id }); },
       openSettings: async () => { window.__navigation.push({ kind: "settings" }); },
       action: async (id, raw) => {
         const payload = id === "project" ? raw : JSON.parse(raw ?? "{}");
         window.__actions.push({ id, payload });
         if (window.__failure) throw Error(window.__failure);
+        if (id === "stop" && window.__holdStop) await new Promise(resolve => { window.__releaseStop = resolve; });
         const data = window.__data, task = data.tasks.find(task => task.id === payload.id);
         if (id === "move") { task.status = payload.status; task.revision++; }
         if (id === "edit") { Object.assign(task, payload); task.revision++; }
@@ -71,7 +72,7 @@ async function load({ locale = "en", theme = "light", data = fixture, failLoad =
     };
   }, { data, locale, theme, failLoad, loading });
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  if (!loading && !failLoad) await expect(page.locator(data.conversationRunId ? ".kb-task-conversation" : ".kb-project-name")).toBeVisible();
+  if (!loading && !failLoad) await expect(page.locator(".kb-project-name")).toBeVisible();
 }
 async function choose(label, option, scope = page) {
   await scope.getByRole("combobox", { name: label, exact: true }).click();
@@ -147,7 +148,15 @@ try {
   await edit.getByRole("textbox", { name: "Raw requirement" }).fill("Clarified requirement.");
   await edit.getByRole("button", { name: "Save", exact: true }).click();
   const edited = await lastAction(); assert.equal(edited.id, "edit"); assert.equal(edited.payload.revision, 7); assert.equal(edited.payload.description, "Clarified requirement."); checks++;
-  await page.keyboard.press("Escape"); await load(); await open("running");
+  await page.keyboard.press("Escape"); await load();
+  const runningCard = page.locator(".kb-task").filter({has: page.getByRole("button", {name: "View task #3: Audit keyboard navigation", exact: true})});
+  const runningConversation = runningCard.getByRole("button", {name: "Open task conversation", exact: true});
+  await expect(runningConversation).toHaveClass(/mu-button-primary/);
+  await runningConversation.click();
+  assert.deepEqual(await page.evaluate(() => window.__navigation), [{kind: "conversation", id: "session-1"}]);
+  assert.deepEqual(await page.evaluate(() => window.__actions), []);
+  await expect(detail()).toHaveCount(0); checks++;
+  await open("running");
   await expect(detail().getByRole("button", { name: "Analyze", exact: true })).toBeDisabled();
   await detail().getByRole("button", { name: "Task management", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "Edit task", exact: true })).toBeDisabled();
@@ -274,39 +283,145 @@ try {
   await page.getByRole("tab", { name: "List", exact: true }).click();
   await expect(page.getByText("No tasks yet", { exact: true })).toBeVisible(); checks++;
   const question = "请确认仅处理 generated-output/test 目录，保留项目源码、配置和 README.md。";
-  const waiting = task("todo", 2, "blocked", {analysis: {...analysis, questions: [question]}, blockReason: question, runs: [{...delivery, id: "analysis-question", phase: "analysis", analysis: {...analysis, questions: [question]}}]});
+  const waitingRun = { ...delivery, id: "analysis-question", phase: "analysis", state: "running", finishedAt: undefined, waitingForInput: true, summary: undefined, verdict: undefined, evidence: undefined, artifacts: undefined, target: {...delivery.target, sessionId: "original-task-session"} };
+  const waiting = task("todo", 2, "in_progress", { activeRunId: waitingRun.id, analysis: {...analysis, questions: [question]}, runs: [delivery, waitingRun] });
   for (const width of [390, 900, 1440]) {
     await page.setViewportSize({width, height: width === 390 ? 844 : 1000});
-    await load({locale: "zh-CN", data: {...fixture, tasks: [waiting]}}); await open("todo");
-    await expect(detail().getByRole("textbox", {name: question})).toBeVisible();
-    await expect(detail().getByRole("button", {name: "提交回答并重新分析"})).toBeDisabled();
-    await noPageOverflow(); await screenshot(`clarification-board-${width}`);
-    await load({locale: "zh-CN", data: {...fixture, tasks: [waiting], selectedTaskId: waiting.id, conversationRunId: "analysis-question"}});
-    await expect(page.locator(".kb-task-conversation")).toBeVisible();
-    await expect(page.locator(".kb-page")).toHaveCount(0);
-    await page.getByRole("textbox", {name: question}).fill("仅清理 generated-output/test，保留其他文件。");
-    await noPageOverflow(); await screenshot(`clarification-conversation-${width}`);
-    if (width === 390) {
-      await page.evaluate(() => {window.__failure = "Task changed; refresh and retry";});
-      await page.getByRole("button", {name: "提交回答并重新分析"}).click();
-      await expect(page.getByRole("alert")).toContainText("Task changed");
-      await expect(page.getByRole("textbox", {name: question})).toHaveValue("仅清理 generated-output/test，保留其他文件。"); checks++;
-      await page.evaluate(() => {window.__failure = "";});
-    }
-    await page.getByRole("switch", {name: "分析通过后继续执行"}).click();
-    await page.getByRole("button", {name: "提交回答并继续"}).click();
-    await expectAction("answerQuestions", {id: "todo", revision: 7, answers: ["仅清理 generated-output/test，保留其他文件。"], continueExecution: true});
+    await load({locale: "zh-CN", data: {...fixture, tasks: [waiting]}});
+    await expect(page.getByText("分析 · 等待你的回复", {exact: true})).toBeVisible();
+    await page.getByRole("button", {name: "打开任务对话", exact: true}).click();
+    assert.deepEqual(await page.evaluate(() => window.__navigation), [{kind: "conversation", id: "original-task-session"}]);
+    assert.deepEqual(await page.evaluate(() => window.__actions), []); checks++;
+    await noPageOverflow(); await screenshot(`waiting-board-${width}`);
+    await open("todo");
+    await expect(detail().getByRole("region", {name: "当前执行"}).getByText("分析 · 等待你的回复", {exact: true})).toBeVisible();
+    await expect(detail().getByRole("textbox", {name: question})).toHaveCount(0);
+    await expect(detail().getByRole("button", {name: "执行", exact: true})).toBeDisabled();
+    await expect(detail().getByRole("button", {name: "停止", exact: true})).toBeEnabled();
+    await expect(detail().getByRole("button", {name: "结束本次尝试", exact: true})).toHaveCount(0);
+    await expect(detail().getByRole("button", {name: "继续", exact: true})).toHaveCount(0);
+    await expect(detail().getByRole("button", {name: "重试", exact: true})).toHaveCount(0);
+    await detail().getByRole("button", {name: "打开任务对话", exact: true}).click();
+    assert.equal((await page.evaluate(() => window.__navigation.at(-1))).id, "original-task-session"); checks++;
+    await noPageOverflow(); await screenshot(`waiting-detail-${width}`);
+    await page.keyboard.press("Escape");
+    await page.getByRole("tab", {name: "列表", exact: true}).click();
+    await expect(page.getByRole("table").getByText("分析 · 等待你的回复", {exact: true})).toBeVisible();
+    await page.getByRole("table").getByRole("button", {name: "打开任务对话", exact: true}).click();
+    assert.equal((await page.evaluate(() => window.__navigation.at(-1))).id, "original-task-session"); checks++;
+    await noPageOverflow(); await screenshot(`waiting-list-${width}`);
   }
-  await load({data: {...fixture, tasks: [{...waiting, activeRunId: "reanalyze"}], selectedTaskId: waiting.id, conversationRunId: "analysis-question"}});
-  await expect(page.getByRole("textbox", {name: question})).toBeDisabled(); checks++;
-  await load({data: {...fixture, tasks: [{...waiting, analysis, blockReason: undefined, clarifications: [{id: "answer-1", analysisRunId: "analysis-question", createdAt: now, answers: [{question, answer: "Only generated files"}]}]}], selectedTaskId: waiting.id, conversationRunId: "analysis-question"}});
-  await expect(page.getByText("Only generated files", {exact: true})).toBeVisible();
-  await expect(page.locator(".kb-clarification")).toHaveCount(0); checks++;
+  await page.setViewportSize({width: 1440, height: 1000});
+  // Old conversation metadata must never select a bespoke conversation UI.
+  await load({data: {...fixture, tasks: [waiting], selectedTaskId: waiting.id, conversationRunId: waitingRun.id}});
+  await expect(page.locator(".kb-page")).toHaveCount(1);
+  await expect(page.locator(".kb-task-conversation,.kb-clarification")).toHaveCount(0);
+  assert.deepEqual(await page.evaluate(() => window.__navigation), []); checks++;
+  await page.evaluate(() => { window.__navigationFailure = "Conversation unavailable"; });
+  await detail().getByRole("button", {name: "Open task conversation", exact: true}).click();
+  await expect(detail().getByRole("alert")).toContainText("Conversation unavailable"); checks++;
+  const awaitingReport = {...waiting, runs: [delivery, {...waitingRun, state: "completed", waitingForInput: false, awaitingReport: true, finishedAt: now + 20000}]};
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({width, height: width === 390 ? 844 : 1000});
+    await load({data: {...fixture, tasks: [awaitingReport]}}); await open("todo");
+    const notice = detail().getByRole("region", {name: "Current run"});
+    await expect(notice.getByText("Awaiting task report", {exact: true})).toBeVisible();
+    await expect(notice.getByText("Analysis · Conversation turn finished", {exact: true})).toBeVisible();
+    await expect(detail().getByRole("button", {name: "Start", exact: true})).toBeDisabled();
+    await expect(detail().getByRole("button", {name: "Analyze", exact: true})).toBeDisabled();
+    await expect(detail().getByRole("button", {name: "Continue", exact: true})).toHaveCount(0);
+    await expect(detail().getByRole("button", {name: "Retry", exact: true})).toHaveCount(0);
+    await expect(detail().getByRole("button", {name: "Stop", exact: true})).toHaveCount(0);
+    await expect(detail().getByRole("button", {name: "End attempt", exact: true})).toBeEnabled();
+    await notice.getByRole("button", {name: "Open task conversation", exact: true}).click();
+    assert.deepEqual(await page.evaluate(() => window.__navigation), [{kind: "conversation", id: "original-task-session"}]);
+    assert.deepEqual(await page.evaluate(() => window.__actions), []); checks++;
+    await noPageOverflow(); await screenshot(`awaiting-report-${width}`);
+  }
+  await load({data: {...fixture, tasks: [{...awaitingReport, automatic: true}]}}); await open("todo");
+  await page.evaluate(() => {window.__failure = "Host is still running";});
+  await detail().getByRole("button", {name: "End attempt", exact: true}).click();
+  await expectAction("stop", {id: "todo", revision: 7});
+  await expect(detail().getByRole("alert")).toContainText("Host is still running");
+  assert.deepEqual(await page.evaluate(() => ({active: window.__data.tasks[0].activeRunId, automatic: window.__data.tasks[0].automatic})), {active: waitingRun.id, automatic: true}); checks++;
+  await page.evaluate(() => {window.__failure = ""; window.__holdStop = true;});
+  await detail().getByRole("button", {name: "End attempt", exact: true}).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releaseStop)).toBe("function");
+  await expect(detail().getByRole("button", {name: "End attempt", exact: true})).toBeDisabled();
+  await expect(detail().getByRole("button", {name: "Analyze", exact: true})).toBeDisabled();
+  assert.deepEqual(await page.evaluate(() => ({active: window.__data.tasks[0].activeRunId, automatic: window.__data.tasks[0].automatic})), {active: waitingRun.id, automatic: true}); checks++;
+  // Only the host-confirmed snapshot releases the task and disables automation.
+  await page.evaluate(() => {
+    const task = window.__data.tasks[0], run = task.runs[1];
+    delete task.activeRunId; task.automatic = false; task.revision++;
+    run.state = "cancelled"; run.awaitingReport = false;
+    window.__releaseStop();
+  });
+  await expect(detail().getByRole("button", {name: "End attempt", exact: true})).toHaveCount(0);
+  await expect(detail().getByRole("button", {name: "Reconfirm requirement", exact: true})).toBeEnabled();
+  await expect(detail().locator(".kb-properties").first().getByText("No", {exact: true})).toBeVisible();
+  assert.equal((await page.evaluate(() => window.__actions)).length, 2); checks++;
+  await load({locale: "zh-CN", data: {...fixture, tasks: [awaitingReport]}}); await open("todo");
+  await detail().getByRole("button", {name: "结束本次尝试", exact: true}).click();
+  await expectAction("stop", {id: "todo", revision: 7});
+  // A native answer and a later report update the existing run in place.
+  await load({data: {...fixture, tasks: [waiting], selectedTaskId: waiting.id}});
+  await page.evaluate(() => { window.__data.tasks[0].runs[1].waitingForInput = false; window.__emit(); });
+  await expect(detail().getByRole("region", {name: "Current run"}).getByText("Analysis · Running", {exact: true})).toBeVisible();
+  await expect(page.getByText("Waiting for your reply", {exact: false})).toHaveCount(0); checks++;
+  await page.evaluate(at => {
+    const task = window.__data.tasks[0], run = task.runs[1];
+    Object.assign(run, {state: "completed", awaitingReport: false, reportSubmittedAt: at, finishedAt: at, summary: "Business report received"});
+    delete task.activeRunId; task.status = "in_review"; task.revision++; window.__emit();
+  }, now + 25000);
+  await expect(detail().getByRole("region", {name: "Current run"}).getByText("Report submitted", {exact: true})).toBeVisible();
+  await expect(detail().getByRole("button", {name: "Accept", exact: true})).toBeEnabled();
+  await detail().getByRole("tab", {name: /^Runs/}).click();
+  await expect(detail().getByText("Business report received", {exact: true})).toBeVisible();
+  await expect(detail().getByText("Report submitted at", {exact: true})).toBeVisible();
+  await detail().getByRole("button", {name: "Accept", exact: true}).click();
+  await expectAction("accept", {id: "todo", revision: 8});
+  const missingConversation = {...waiting, runs: [{...waitingRun, target: undefined}]};
+  await load({data: {...fixture, tasks: [missingConversation]}}); await open("todo");
+  await expect(detail().getByRole("button", {name: "Open task conversation", exact: true})).toBeDisabled();
+  await expect(detail().getByText("Task conversation unavailable", {exact: true})).toBeVisible(); checks++;
+  for (const phase of ["execution", "review"]) {
+    await load({data: {...fixture, tasks: [{...awaitingReport, status: "in_review", runs: [{...awaitingReport.runs[1], phase}]}]}}); await open("todo");
+    await expect(detail().getByRole("button", {name: "Accept", exact: true})).toBeDisabled();
+    await expect(detail().getByRole("button", {name: "Review", exact: true})).toBeDisabled();
+    await expect(detail().getByRole("button", {name: "Request rework", exact: true})).toBeDisabled();
+    await detail().getByRole("button", {name: "Task management", exact: true}).click();
+    await expect(page.getByRole("menuitem", {name: "Edit task", exact: true})).toBeDisabled();
+    await expect(page.getByRole("menuitem", {name: "Archive task", exact: true})).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(detail().getByRole("button", {name: "Open task conversation", exact: true})).toBeEnabled(); checks++;
+  }
+  // Archived analysis questions are historical data, not a pending native question.
+  await load({data: {...fixture, tasks: [{...waiting, activeRunId: undefined, status: "todo", runs: [delivery]}]}}); await open("todo");
+  await expect(detail().getByRole("button", {name: "Start", exact: true})).toBeEnabled();
+  await detail().getByRole("button", {name: "Start", exact: true}).click();
+  await expectAction("start", {id: "todo", revision: 7});
+  await page.keyboard.press("Escape");
+  await choose("Task #2 status", "In progress");
+  await expectAction("move", {id: "todo", revision: 7, status: "in_progress"});
+  // Legacy questions remain actionable through native analysis on the board.
+  for (const [width, locale, runs] of [[390, "en", []], [1440, "zh-CN", [{...delivery, phase: "analysis"}]]]) {
+    await page.setViewportSize({width, height: width === 390 ? 844 : 1000});
+    const legacy = {...waiting, activeRunId: undefined, status: "blocked", blockReason: question, runs};
+    await load({locale, data: {...fixture, tasks: [legacy]}}); await open("todo");
+    const reconfirm = detail().getByRole("button", {name: locale === "en" ? "Reconfirm requirement" : "重新确认需求", exact: true});
+    await expect(reconfirm).toBeEnabled();
+    await expect(detail().getByRole("textbox", {name: question})).toHaveCount(0);
+    await expect(page.locator(".kb-clarification")).toHaveCount(0);
+    await noPageOverflow(); await screenshot(`legacy-questions-${width}`);
+    await reconfirm.click(); await expectAction("analyze", {id: "todo", revision: 7});
+    await expect(detail().getByRole("button", {name: locale === "en" ? "Start" : "执行", exact: true})).toBeEnabled();
+  }
   await load({ failLoad: true }); await expect(page.getByRole("alert")).toContainText("Snapshot unavailable"); checks++;
   await load({ loading: true }); await expect(page.getByRole("status")).toContainText("正在加载");
   await expect(page.getByRole("button", { name: "新建任务", exact: true })).toBeDisabled(); checks++;
   assert.deepEqual(failures, []);
-  console.log(`PASS: ${checks} UI assertions; board, list, editor screenshots at 390/900/1440; Chinese, dark theme, loading/error/empty states.`);
+  console.log(`PASS: ${checks} UI assertions; board, list, editor and waiting screenshots at 390/900/1440; native question navigation, awaiting reports, review/accept; Chinese, dark theme, loading/error/empty states.`);
 } catch (error) {
   await screenshot("failed-state");
   console.log(await page.evaluate(() => ({ dialogs: [...document.querySelectorAll('[role="dialog"]')].map(node => node.querySelector("h2")?.textContent), focus: document.activeElement?.tagName, last: window.__actions.at(-1) })));

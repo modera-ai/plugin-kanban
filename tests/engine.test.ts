@@ -13,6 +13,7 @@ test("completion before startRole returns is applied once and survives reopen", 
     const pending = currentRun(await f.task(task.id))!;
     expect(pending.state).toBe("starting");
     expect(pending.runId).toBeUndefined();
+    await f.engine.report({action: "analysis", goal: analysis.goal, scope: analysis.scope, acceptanceCriteria: analysis.acceptanceCriteria}, {projectId: project, sessionId: target.sessionId, runId: "fast-run", signal: f.controller.signal});
     return startedRun("fast-run");
   });
   await f.engine.tick();
@@ -122,8 +123,8 @@ test.each([
   await f.engine.queue(project, task.id, phase);
   await f.engine.tick();
   expect(f.runtime.target).toHaveBeenCalledWith(project, "", selection);
-  expect(f.runtime.startRole).toHaveBeenCalledWith(expect.objectContaining({ projectId: project, selection }), expect.objectContaining({ id: roleId, prompt: "Act as " + roleId, tools: ["read_file"], limits: { maxSteps: 8 } }), expect.stringContaining(task.description), expect.any(AbortSignal));
-  expect(f.runtime.prepare).toHaveBeenCalledWith(expect.objectContaining({ projectId: project }), task.title, true, { taskId: task.id, workbenchId: "modera.kanban.workbench" });
+  expect(f.runtime.startRole).toHaveBeenCalledWith(expect.objectContaining({ projectId: project, selection }), expect.objectContaining({ id: roleId, prompt: "Act as " + roleId, tools: ["read_file"], limits: { maxSteps: 8 } }), expect.stringContaining(task.description), expect.any(AbortSignal), {workflowTools: ["ask_user_question", "kanban_report"]});
+  expect(f.runtime.prepare).toHaveBeenCalledWith(expect.objectContaining({ projectId: project }), task.title, true, { taskId: task.id, workbenchId: "modera.kanban.workbench", conversationMode: "native" });
   expect(f.runtime.start).not.toHaveBeenCalled();
   expect(f.runtime.capture).not.toHaveBeenCalled();
 });
@@ -217,6 +218,7 @@ test("restart reconciles a stored completed result without dispatching or accept
   await f.engine.queue(project, task.id, "execution");
   await f.engine.tick();
   const run = currentRun(await f.task(task.id))!;
+  await f.report(task.id, delivery);
   const reopened = await f.reopen(), restarted = f.makeEngine(reopened);
   f.runtime.inspect.mockResolvedValue({ busy: false, outcome: "completed" });
   await restarted.tick();
@@ -267,7 +269,7 @@ test("revoked inspection on restart cannot authorize replacement execution", asy
   expect(f.runtime.startRole).toHaveBeenCalledTimes(1);
 });
 
-test("truncated completion fetches the full result and ignores foreign or stale run events", async () => {
+test("truncated completion fetches display text but cannot infer delivery; foreign events are ignored", async () => {
   const f = await engineFixture();
   const task = await f.create();
   await f.engine.queue(project, task.id, "execution");
@@ -279,19 +281,19 @@ test("truncated completion fetches the full result and ignores foreign or stale 
   }
   await f.complete(task.id, {}, { truncated: true });
   expect(f.runtime.result).toHaveBeenCalledWith(run.target, run.runId);
-  expect(await f.task(task.id)).toMatchObject({ status: "in_review", runs: [{ state: "completed", ...delivery }] });
+  expect(await f.task(task.id)).toMatchObject({ status: "in_progress", activeRunId: run.id, runs: [{ state: "completed", awaitingReport: true }] });
 });
 
-test.each(["failed", "not_run"] as const)("review claiming pass with %s evidence is blocked rather than accepted", async result => {
+test.each(["failed", "not_run"] as const)("review claiming pass with %s evidence is rejected by the tool without advancing", async result => {
   const f = await engineFixture();
   const task = await f.create();
   await f.store.update(state => { taskById(state, project, task.id).status = "in_review"; });
   await f.engine.queue(project, task.id, "review");
   await f.engine.tick();
-  await f.complete(task.id, { ...review, evidence: [{ ...review.evidence[0], result }] });
+  await expect(f.report(task.id, { ...review, evidence: [{ ...review.evidence[0], result }] })).rejects.toThrow("passing evidence");
   const blocked = await f.task(task.id);
-  expect(blocked).toMatchObject({ status: "blocked", blockReason: expect.stringContaining("passing evidence"), runs: [{ phase: "review", state: "failed" }] });
-  expect(blocked.activeRunId).toBeUndefined();
+  expect(blocked).toMatchObject({ status: "in_review", runs: [{ phase: "review", state: "running" }] });
+  expect(blocked.activeRunId).toBeTruthy();
   expect(blocked.runs[0]!.verdict).toBeUndefined();
 });
 

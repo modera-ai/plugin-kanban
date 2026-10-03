@@ -6,7 +6,7 @@ import type { CompletedRunObservation, PluginContext, ScheduledRunTarget, ToolCo
 import { BoardEngine, type TaskRuntime } from "../src/engine";
 import { activate } from "../src/index";
 import { BoardStore, createTask, defaultSettings, taskById } from "../src/store";
-import type { AgentRole, BoardData, KanbanTask, ModelSelection, RoleCatalog, TaskInput } from "../src/types";
+import type { AgentRole, BoardData, KanbanTask, ModelSelection, RoleCatalog, TaskInput, Phase } from "../src/types";
 
 export type StartedRun = Awaited<ReturnType<TaskRuntime["start"]>>;
 export const startedRun = (id: string): StartedRun => ({ runId: id as StartedRun["runId"] });
@@ -38,7 +38,7 @@ export function runtimeMock() {
   return {
     options: vi.fn<NonNullable<TaskRuntime["options"]>>().mockResolvedValue({ projects: [{ id: project, name: "A" }, { id: otherProject, name: "B" }], conversations: [], models: [{ profileId: selection.profileId, name: "Board model", models: [selection.model] }] }),
     target: vi.fn<NonNullable<TaskRuntime["target"]>>(async (projectId, sessionId, model) => ({ projectId, sessionId, selection: structuredClone(model) })),
-    prepare: vi.fn<NonNullable<TaskRuntime["prepare"]>>(async target => ({ ...target, sessionId: "session-" + ++sessions })),
+    prepare: vi.fn<NonNullable<TaskRuntime["prepare"]>>(async (target, _title, fresh) => fresh ? ({ ...target, sessionId: "session-" + ++sessions }) : structuredClone(target)),
     inspect: vi.fn<TaskRuntime["inspect"]>().mockResolvedValue({ busy: true, outcome: "running" }),
     capture: vi.fn<TaskRuntime["capture"]>().mockRejectedValue(new Error("Unexpected capture")),
     start: vi.fn<TaskRuntime["start"]>().mockRejectedValue(new Error("Expected independent role execution")),
@@ -49,7 +49,17 @@ export function runtimeMock() {
 }
 
 export function completion(target: ScheduledRunTarget, runId: string, result: unknown, overrides: Partial<CompletedRunObservation> = {}): CompletedRunObservation {
-  return { projectId: target.projectId, sessionId: target.sessionId, runId, outcome: "completed", messages: [{ id: "final", role: "assistant", text: JSON.stringify(result) }], ...overrides };
+  const value = result as {summary?: string; goal?: string};
+  return { projectId: target.projectId, sessionId: target.sessionId, runId, outcome: "completed", messages: [{ id: "final", role: "assistant", text: typeof result === "string" ? result : value?.summary ?? value?.goal ?? "I have finished this turn." }], ...overrides };
+}
+
+export function reportArguments(result: unknown, phase: Phase) {
+  const value = result as Record<string, unknown>;
+  if (!value || typeof value !== "object" || (!value.goal && !value.summary)) return undefined;
+  if (value.verdict === "blocked") return {action: "blocked", summary: value.summary};
+  if (phase === "analysis") { const {questions, ...analysis} = value; return {action: "analysis", ...analysis, ...(Array.isArray(questions) && questions.length ? {questions} : {})}; }
+  const {verdict, ...report} = value;
+  return {action: phase === "execution" ? "delivery" : "review", ...report, ...(phase === "review" ? {verdict} : {})};
 }
 
 export async function storeFixture() {
@@ -76,11 +86,17 @@ export async function engineFixture() {
   const makeEngine = (store = fixture.store) => new BoardEngine(store, runtime, catalog, controller.signal, changed);
   const engine = makeEngine();
   const task = async (id: string, store = fixture.store) => taskById(await store.read(), project, id);
+  const report = async (id: string, result: unknown, overrides: Partial<ToolContext> = {}) => {
+    const run = (await task(id)).runs.at(-1)!;
+    return engine.report(reportArguments(result, run.phase) ?? result, {projectId: project, sessionId: run.target!.sessionId, runId: run.runId!, signal: controller.signal, ...overrides});
+  };
   const complete = async (id: string, result: unknown, overrides: Partial<CompletedRunObservation> = {}) => {
     const current = await task(id), run = current.runs.at(-1)!;
+    const args = reportArguments(result, run.phase);
+    if (args && !run.finishedAt && !Object.keys(overrides).some(key => ["projectId", "sessionId", "runId", "outcome"].includes(key))) await report(id, result);
     await engine.completed(completion(run.target!, run.runId!, result, overrides));
   };
-  return { ...fixture, runtime, roles, catalog, changed, controller, engine, makeEngine, task, complete };
+  return { ...fixture, runtime, roles, catalog, changed, controller, engine, makeEngine, task, report, complete };
 }
 
 export async function pluginFixture() {
@@ -123,6 +139,8 @@ export async function pluginFixture() {
   };
   const complete = async (id: string, result: unknown, overrides: Partial<CompletedRunObservation> = {}) => {
     const run = (await task(id)).runs.at(-1)!;
+    const args = reportArguments(result, run.phase);
+    if (args && !run.finishedAt && !Object.keys(overrides).some(key => ["projectId", "sessionId", "runId", "outcome"].includes(key))) await plugin.tools![1]!.execute(args, {...context(), sessionId: run.target!.sessionId, runId: run.runId!});
     await plugin.runCompleted!(completion(run.target!, run.runId!, result, overrides), { signal: controller.signal, generate: vi.fn() });
   };
   // Fake only intervals; await the actual engine instead of sleeping for disk I/O.

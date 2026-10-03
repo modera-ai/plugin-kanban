@@ -85,12 +85,27 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 .kb-inline-status .mu-choice-chevron { width: 12px; height: 12px; }
 .kb-column-empty { text-align: center; padding: 26px 8px; font-size: 11px; color: var(--mu-muted); }
 .kb-block-reason { font-size: 11px; line-height: 1.5; color: var(--mu-danger); overflow-wrap: anywhere; margin: 8px 0 0; }
-.kb-run-live { display: flex; align-items: center; gap: 5px; color: var(--mu-accent); font-size: 10px; margin-top: 8px; }
+.kb-run-status { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 7px; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; min-width: 0; }
+.kb-run-status > svg, .kb-run-status > .kb-activity-dot { flex: none; }
+.kb-run-status.running, .kb-run-status.starting { color: var(--mu-accent); }
+.kb-run-status.waiting, .kb-report-state.pending { color: var(--kb-warning); }
+.kb-report-state.submitted { color: var(--mu-success); }
+.kb-run-status.failed, .kb-run-status.interrupted { color: var(--mu-danger); }
+.kb-run-role { color: var(--mu-muted); }
+.kb-task-main .kb-run-status { margin-top: 10px; }
+.kb-task-conversation-actions { display: grid; gap: 6px; padding: 0 12px 12px; }
+.kb-task-conversation-actions .mu-button, .kb-run-notice .mu-button, .kb-list td > .mu-button { max-width: 100%; height: auto; min-height: 30px; white-space: normal; }
+.kb-task-conversation-actions .mu-button > svg, .kb-run-notice .mu-button > svg { flex: none; }
+.kb-run-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 0; margin-bottom: 14px; border-block: 1px solid var(--mu-line); }
+.kb-run-notice > [role="status"] { flex: 1 1 220px; min-width: 0; }
+.kb-run-notice.waiting { border-left: 3px solid var(--kb-warning); padding-left: 12px; }
+.kb-list td > .mu-button { margin-top: 8px; }
 .kb-list-wrap { flex: 1; min-height: 0; overflow: auto; padding-bottom: 16px; }
-.kb-list { border-collapse: collapse; width: 100%; min-width: 740px; font-size: 12px; text-align: left; }
+.kb-list { border-collapse: collapse; width: 100%; min-width: 1100px; font-size: 12px; text-align: left; }
 .kb-list th { font-size: 11px; font-weight: 500; color: var(--mu-muted); background: var(--mu-page); position: sticky; top: 0; z-index: 1; padding: 10px 12px; border-bottom: 1px solid var(--mu-line); white-space: nowrap; }
 .kb-list td { border-bottom: 1px solid var(--mu-line); padding: 8px 12px; max-width: 210px; overflow-wrap: anywhere; }
-.kb-list td:first-child { width: 42%; max-width: none; }
+.kb-list td:first-child { width: 30%; max-width: none; }
+.kb-list td:nth-child(3) { width: 220px; min-width: 220px; }
 .kb-list tr:hover td { background: var(--mu-soft); }
 .kb-list tr[data-selected="true"] td { background: color-mix(in srgb, var(--mu-accent) 7%, var(--mu-page)); }
 .kb-task-link { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: inherit; padding: 5px 0; font: inherit; width: 100%; text-align: left; }
@@ -147,18 +162,6 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 .kb-run-state.failed, .kb-run-state.interrupted { color: var(--mu-danger); }
 .kb-run-state.completed { color: var(--mu-success); }
 .kb-run-state.running, .kb-run-state.starting { color: var(--mu-accent); }
-.kb-clarification { display: grid; gap: 14px; padding: 18px 0; border-block: 1px solid var(--mu-line); }
-.kb-clarification h3 { margin: 0; font-size: 14px; }
-.kb-clarification .mu-field-label, .kb-clarification .mu-toggle-row label { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
-.kb-clarification > button { justify-self: start; max-width: 100%; white-space: normal; }
-.kb-clarification-history { margin: 0; }
-.kb-clarification-history > div { padding: 10px 0; border-bottom: 1px solid var(--mu-line); }
-.kb-clarification-history dt { color: var(--mu-muted); font-size: 12px; overflow-wrap: anywhere; }
-.kb-clarification-history dd { margin: 6px 0 0; }
-.kb-task-conversation { height: 100%; overflow: auto; padding: 20px; box-sizing: border-box; }
-.kb-task-conversation > header { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.kb-task-conversation h1 { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; margin: 0; min-width: 0; }
-.kb-task-conversation .kb-detail-section { margin-top: 18px; }
 .kb-run-body { padding-top: 14px; }
 .kb-run-body > .mu-button { margin-top: 8px; }
 .kb-run-body > .kb-error { margin-top: 12px; }

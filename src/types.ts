@@ -12,6 +12,12 @@ export interface RoleCatalog { revision: number; roles: AgentRole[]; templates: 
 export interface Evidence { label: string; result: "passed" | "failed" | "not_run"; details: string }
 export interface Artifact { title: string; path: string }
 export interface TaskAnalysis { goal: string; scope: string; acceptanceCriteria: string[]; questions: string[]; subtasks: { title: string; description: string; acceptanceCriteria: string[] }[] }
+export interface TaskReport {
+  action: "analysis" | "delivery" | "review" | "blocked";
+  summary: string; analysis?: TaskAnalysis;
+  verdict?: "ready_for_review" | "blocked" | "passed" | "changes_requested";
+  evidence?: Evidence[]; artifacts?: Artifact[];
+}
 export interface TaskRun {
   id: string; phase: Phase; state: RunState; roleId: string; roleName: string;
   target?: ScheduledRunTarget; runId?: string; startedAt: number; finishedAt?: number;
@@ -21,7 +27,11 @@ export interface TaskRun {
   isolatedWorkspace?: boolean;
   automatic?: boolean;
   analysis?: TaskAnalysis;
+  report?: TaskReport; reportSubmittedAt?: number;
+  waitingForInput?: boolean; awaitingReport?: boolean; turnEndedAt?: number;
+  conversationMode?: "native";
 }
+/** Read-only compatibility history from the former board clarification flow. */
 export interface TaskClarification { id: string; analysisRunId: string; answers: { question: string; answer: string }[]; createdAt: number }
 export interface TaskComment { id: string; text: string; author: "user" | "agent"; createdAt: number }
 export interface TaskActivity { id: string; kind: string; text: string; createdAt: number }
@@ -46,6 +56,5 @@ export interface BoardData {
   projects: {id: string; name: string}[];
   models: {profileId: string; name: string; models: string[]; efforts?: Readonly<Record<string, readonly ModelSelection["reasoningEffort"][]>>}[];
   selectedTaskId?: string; executionAvailable: boolean; isolatedWorkspaces?: boolean; error?: string;
-  conversationRunId?: string;
 }
 export type TaskInput = Pick<KanbanTask, "title" | "description" | "type" | "priority" | "status" | "labels" | "assigneeId" | "reviewerId" | "dependencyIds" | "iteration" | "milestone" | "acceptanceCriteria" | "automatic"> & { parentId?: string };

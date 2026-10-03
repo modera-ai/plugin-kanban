@@ -3,8 +3,8 @@ import { frontend } from "@modera/plugin-sdk/react";
 import { Button, Combobox, Dialog, Menu, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, ToggleRow, useLabel } from "@modera/ui";
 import { Archive, ArchiveRestore, Check, CheckCircle2, FileText, GitBranch, MessageSquare, Pause, Pencil, Play, RotateCcw, Send, Sparkles, Square, Trash2, XCircle } from "lucide-react";
 import type { BoardData, KanbanTask, TaskRun, TaskStatus } from "../../src/types";
-import { ErrorNotice, Priority, Status, moveOptions, pickerOpen, roleName, runningStates, typeNames, type Action, type Translate } from "./shared";
-import { Clarification, ClarificationHistory } from "./clarification";
+import { ErrorNotice, Priority, Status, moveOptions, pickerOpen, roleName, typeNames, type Action, type Translate } from "./shared";
+import { isLive, latestRun, ReportStatus, RunNotice, runStateName, phaseName } from "./run-status";
 
 export function TaskDetails({ task, data, locale, busy, error, act, close, edit, remove, onError, select }: { task: KanbanTask; data: BoardData; locale: string; busy: boolean; error: string; act: Action; close(): void; edit(): void; remove(): void; onError(message: string): void; select(id: string): void }) {
   const t = useLabel();
@@ -16,11 +16,12 @@ export function TaskDetails({ task, data, locale, busy, error, act, close, edit,
   const [openedRun, setOpenedRun] = useState(""), [inspected, setInspected] = useState(false);
   const reference = { id: task.id, revision: task.revision };
   const active = task.runs.find(run => run.id === task.activeRunId);
-  const running = Boolean(active && runningStates.includes(active.state));
+  const running = Boolean(active && isLive(active));
+  const current = latestRun(task);
   const unresolved = Boolean(task.activeRunId);
+  const needsReconfirmation = !unresolved && Boolean(task.analysis?.questions.length);
   const executable = !busy && !task.archived && !unresolved && data.executionAvailable && !["done", "cancelled"].includes(task.status);
-  const canRecover = !busy && !task.archived && !running && data.executionAvailable && !["done", "cancelled"].includes(task.status);
-  const hasQuestions = Boolean(task.analysis?.questions.length);
+  const canRecover = !busy && !task.archived && !running && !current?.awaitingReport && data.executionAvailable && !["done", "cancelled"].includes(task.status);
   const dependenciesReady = task.dependencyIds.every(id => data.tasks.find(item => item.id === id)?.status === "done");
   const recover = (action: "retry" | "continue") => {
     if (active && unresolved) { setInspected(false); setRecovery({ action, revision: task.revision, runId: active.id, sessionId: active.target?.sessionId }); }
@@ -33,13 +34,15 @@ export function TaskDetails({ task, data, locale, busy, error, act, close, edit,
     <section className="kb-detail" aria-label={t("任务详情", "Task details")}>
       <header className="kb-detail-header"><span className="kb-number">#{task.number}</span><Status value={task.status} /></header>
       <div className="kb-detail-title"><div className="kb-detail-tags"><span className="kb-type">{typeNames(t)[task.type]}</span><Priority value={task.priority} />{task.archived && <span className="kb-muted">{t("已归档", "Archived")}</span>}</div></div>
+      {current && <RunNotice run={current} busy={busy} onError={onError} />}
       <div className="kb-detail-actions">
-        <Button size="small" variant="outline" disabled={!executable} onClick={() => void act("analyze", reference)}><Sparkles size={14} aria-hidden />{t("分析", "Analyze")}</Button>
-        <Button size="small" variant="primary" disabled={!executable || hasQuestions || !dependenciesReady} onClick={() => void act("start", reference)}><Play size={14} aria-hidden />{t("执行", "Start")}</Button>
+        <Button size="small" variant="outline" disabled={!executable} onClick={() => void act("analyze", reference)}><Sparkles size={14} aria-hidden />{needsReconfirmation ? t("重新确认需求", "Reconfirm requirement") : t("分析", "Analyze")}</Button>
+        <Button size="small" variant="primary" disabled={!executable || !dependenciesReady} onClick={() => void act("start", reference)}><Play size={14} aria-hidden />{t("执行", "Start")}</Button>
         <Button size="small" variant="outline" disabled={!executable || task.status !== "in_review"} onClick={() => void act("review", reference)}><CheckCircle2 size={14} aria-hidden />{t("审核", "Review")}</Button>
         {running && <Button size="small" variant="outline" disabled={busy} onClick={() => void act("stop", reference)}><Square size={13} aria-hidden />{t("停止", "Stop")}</Button>}
-        {task.runs.at(-1) && ["failed", "interrupted", "cancelled"].includes(task.runs.at(-1)!.state) && <Button size="small" variant="outline" disabled={!canRecover} onClick={() => recover("retry")}><RotateCcw size={14} aria-hidden />{t("重试", "Retry")}</Button>}
-        {task.runs.at(-1) && ["paused", "interrupted"].includes(task.runs.at(-1)!.state) && <Button size="small" variant="outline" disabled={!canRecover} onClick={() => recover("continue")}><Play size={14} aria-hidden />{t("继续", "Continue")}</Button>}
+        {active?.awaitingReport && !running && <Button size="small" variant="outline" disabled={busy} onClick={() => void act("stop", reference)}><Square size={13} aria-hidden />{t("结束本次尝试", "End attempt")}</Button>}
+        {!current?.awaitingReport && task.runs.at(-1) && ["failed", "interrupted", "cancelled"].includes(task.runs.at(-1)!.state) && <Button size="small" variant="outline" disabled={!canRecover} onClick={() => recover("retry")}><RotateCcw size={14} aria-hidden />{t("重试", "Retry")}</Button>}
+        {!current?.awaitingReport && task.runs.at(-1) && ["paused", "interrupted"].includes(task.runs.at(-1)!.state) && <Button size="small" variant="outline" disabled={!canRecover} onClick={() => recover("continue")}><Play size={14} aria-hidden />{t("继续", "Continue")}</Button>}
         <Menu label={t("任务管理", "Task management")} onOpenChange={setMenuOpen} items={[
           { label: t("编辑任务", "Edit task"), icon: Pencil, disabled: busy || unresolved || task.archived, onSelect: edit },
           { label: t("拆分子任务", "Split subtasks"), icon: GitBranch, disabled: busy || unresolved || task.archived || !task.analysis?.subtasks.length || data.tasks.some(item => item.parentId === task.id), onSelect: () => void act("split", reference) },
@@ -49,9 +52,7 @@ export function TaskDetails({ task, data, locale, busy, error, act, close, edit,
       </div>
       {task.status === "in_review" && !task.archived && <div className="kb-review-actions"><Button size="small" variant="outline" disabled={busy || unresolved} onClick={() => void act("accept", reference)}><Check size={14} aria-hidden />{t("验收通过", "Accept")}</Button><Button size="small" variant="outline" disabled={busy || unresolved} onClick={() => { setReworkRevision(task.revision); setFeedback(""); setRework(true); }}><RotateCcw size={14} aria-hidden />{t("要求返工", "Request rework")}</Button></div>}
       <ErrorNotice message={error} />
-      {task.blockReason && (!hasQuestions || task.blockReason !== task.analysis?.questions.join("\n")) && <ErrorNotice message={task.blockReason} />}
-      {hasQuestions && <Clarification key={JSON.stringify([task.id, task.analysis, task.activeRunId])} task={task} disabled={!executable} act={act} />}
-      <ClarificationHistory task={task} />
+      <ErrorNotice message={task.blockReason} />
       <Tabs className="kb-detail-tabs" size="small" variant="underline" value={tab} onValueChange={setTab}>
         <TabsList aria-label={t("详情分类", "Detail sections")}><TabsTrigger value="overview">{t("详情", "Details")}</TabsTrigger><TabsTrigger value="runs" count={task.runs.length}>{t("执行", "Runs")}</TabsTrigger><TabsTrigger value="comments" count={task.comments.length}>{t("评论", "Comments")}</TabsTrigger><TabsTrigger value="activity" count={task.activity.length}>{t("动态", "Activity")}</TabsTrigger></TabsList>
         <TabsContent value="overview">
@@ -78,10 +79,8 @@ function Criteria({ items, t }: { items: string[]; t: Translate }) {
 
 export function RunResult({ run, locale, onError }: { run: TaskRun; locale: string; onError(message: string): void }) {
   const t = useLabel();
-  const states: Record<TaskRun["state"], string> = { queued: t("排队中", "Queued"), starting: t("启动中", "Starting"), running: t("执行中", "Running"), paused: t("已暂停", "Paused"), failed: t("失败", "Failed"), interrupted: t("已中断", "Interrupted"), completed: t("已完成", "Completed"), cancelled: t("已取消", "Cancelled") };
-  const phases = { analysis: t("分析", "Analysis"), execution: t("执行", "Execution"), review: t("审核", "Review") };
   const verdicts = { ready_for_review: t("可以审核", "Ready for review"), blocked: t("已阻塞", "Blocked"), passed: t("通过", "Passed"), changes_requested: t("需要修改", "Changes requested") };
   const date = (at: number) => new Date(at).toLocaleString(locale);
   const navigate = (kind: "conversation" | "file", value: string) => { void (kind === "conversation" ? frontend().openConversation(value) : frontend().openFile(value)).catch(cause => onError(String(cause))); };
-  return <details className="kb-run" open><summary><span className={`kb-run-state ${run.state}`}><span className="kb-activity-dot" aria-hidden />{phases[run.phase]}</span><strong>{run.roleName || run.roleId}</strong><span>{states[run.state]}</span></summary><div className="kb-run-body"><dl className="kb-properties"><dt>{t("开始", "Started")}</dt><dd><time>{date(run.startedAt)}</time></dd>{run.finishedAt !== undefined && <><dt>{t("结束", "Finished")}</dt><dd><time>{date(run.finishedAt)}</time></dd><dt>{t("耗时", "Duration")}</dt><dd>{Math.max(0, Math.round((run.finishedAt - run.startedAt) / 1000))} s</dd></>}{run.verdict && <><dt>{t("结论", "Verdict")}</dt><dd>{verdicts[run.verdict]}</dd></>}{run.target && <><dt>{t("模型", "Model")}</dt><dd>{run.target.selection.model} · {run.target.selection.reasoningEffort}</dd></>}<dt>{t("执行编号", "Run ID")}</dt><dd className="kb-monospace">{run.runId ?? run.id}</dd></dl>{run.target?.sessionId && <Button size="small" variant="quiet" onClick={() => navigate("conversation", run.target!.sessionId)}><MessageSquare size={14} aria-hidden />{t("打开执行对话", "Open run conversation")}</Button>}{run.summary && <><h4>{t("结果", "Result")}</h4><p className="kb-raw">{run.summary}</p></>}<ErrorNotice message={run.error} />{run.evidence && <><h4>{t("验证证据", "Evidence")}</h4>{run.evidence.length ? <ul className="kb-evidence">{run.evidence.map((item, index) => { const Icon = item.result === "passed" ? CheckCircle2 : item.result === "failed" ? XCircle : Pause; return <li key={index} className={item.result}><header><Icon size={14} aria-hidden /><strong>{item.label}</strong><span>{item.result === "passed" ? t("通过", "Passed") : item.result === "failed" ? t("失败", "Failed") : t("未执行", "Not run")}</span></header><p className="kb-raw">{item.details}</p></li>; })}</ul> : <p className="kb-muted">{t("暂无证据", "No evidence")}</p>}</>}{run.artifacts && <><h4>{t("产物", "Artifacts")}</h4>{run.artifacts.length ? <ul className="kb-artifacts">{run.artifacts.map((artifact, index) => <li key={index}><button type="button" className="kb-text-link" onClick={() => navigate("file", artifact.path)}><FileText size={14} aria-hidden /><span><strong>{artifact.title}</strong><code>{artifact.path}</code></span></button></li>)}</ul> : <p className="kb-muted">{t("暂无产物", "No artifacts")}</p>}</>}</div></details>;
+  return <details className="kb-run" open><summary><span className={`kb-run-state ${run.state}`}><span className="kb-activity-dot" aria-hidden />{phaseName(run, t)}</span><strong>{run.roleName || run.roleId}</strong><span>{runStateName(run, t)}</span><ReportStatus run={run} /></summary><div className="kb-run-body"><dl className="kb-properties"><dt>{t("开始", "Started")}</dt><dd><time>{date(run.startedAt)}</time></dd>{run.finishedAt !== undefined && <><dt>{t("结束", "Finished")}</dt><dd><time>{date(run.finishedAt)}</time></dd><dt>{t("耗时", "Duration")}</dt><dd>{Math.max(0, Math.round((run.finishedAt - run.startedAt) / 1000))} s</dd></>}{run.verdict && <><dt>{t("结论", "Verdict")}</dt><dd>{verdicts[run.verdict]}</dd></>}{run.target && <><dt>{t("模型", "Model")}</dt><dd>{run.target.selection.model} · {run.target.selection.reasoningEffort}</dd></>}{run.reportSubmittedAt !== undefined && <><dt>{t("报告提交于", "Report submitted at")}</dt><dd><time>{date(run.reportSubmittedAt)}</time></dd></>}<dt>{t("执行编号", "Run ID")}</dt><dd className="kb-monospace">{run.runId ?? run.id}</dd></dl>{run.target?.sessionId && <Button size="small" variant="quiet" onClick={() => navigate("conversation", run.target!.sessionId)}><MessageSquare size={14} aria-hidden />{t("打开执行对话", "Open run conversation")}</Button>}{run.summary && <><h4>{t("结果", "Result")}</h4><p className="kb-raw">{run.summary}</p></>}<ErrorNotice message={run.error} />{run.evidence && <><h4>{t("验证证据", "Evidence")}</h4>{run.evidence.length ? <ul className="kb-evidence">{run.evidence.map((item, index) => { const Icon = item.result === "passed" ? CheckCircle2 : item.result === "failed" ? XCircle : Pause; return <li key={index} className={item.result}><header><Icon size={14} aria-hidden /><strong>{item.label}</strong><span>{item.result === "passed" ? t("通过", "Passed") : item.result === "failed" ? t("失败", "Failed") : t("未执行", "Not run")}</span></header><p className="kb-raw">{item.details}</p></li>; })}</ul> : <p className="kb-muted">{t("暂无证据", "No evidence")}</p>}</>}{run.artifacts && <><h4>{t("产物", "Artifacts")}</h4>{run.artifacts.length ? <ul className="kb-artifacts">{run.artifacts.map((artifact, index) => <li key={index}><button type="button" className="kb-text-link" onClick={() => navigate("file", artifact.path)}><FileText size={14} aria-hidden /><span><strong>{artifact.title}</strong><code>{artifact.path}</code></span></button></li>)}</ul> : <p className="kb-muted">{t("暂无产物", "No artifacts")}</p>}</>}</div></details>;
 }

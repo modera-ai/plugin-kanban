@@ -170,6 +170,7 @@ test("retry preserves a manual start's execution follow-up after stopping analys
   f.runtime.inspect.mockResolvedValue({ busy: false, outcome: "cancelled" });
   await f.act("retry", { id: task.id });
   await f.pulseUntil(async () => { expect((await f.task(task.id)).runs.at(-1)).toMatchObject({ phase: "analysis", state: "running" }); });
+  f.runtime.inspect.mockResolvedValue({busy: true, outcome: "running"});
   await f.complete(task.id, analysis);
   expect((await f.task(task.id)).runs.at(-1)).toMatchObject({ phase: "execution", state: "queued" });
   await f.pulseUntil(async () => { expect((await f.task(task.id)).runs.at(-1)).toMatchObject({ phase: "execution", state: "running" }); });

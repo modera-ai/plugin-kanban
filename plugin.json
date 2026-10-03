@@ -10,12 +10,12 @@
   "activationScope": "global",
   "main": "dist/index.cjs",
   "permissions": ["storage.read", "storage.write", "runs.schedule", "runs.delegate", "runs.observe"],
-  "dependencies": [{"id": "modera.subagents", "version": "0.1.0"}],
+  "dependencies": [{"id": "modera.subagents", "version": "0.1.0"}, {"id": "modera.interaction", "version": "0.1.0"}],
   "consumes": {"modera.subagents.roles": {"apiVersion": 1}},
   "extensions": ["workbench"],
   "frontends": {"workbench": {"root": "dist/ui", "entry": "index.html"}},
   "locales": {"zh-CN": {"name": "项目看板", "description": "集中管理需求、智能体分配、自动执行和交付审查。"}},
-  "agentGuidance": "Use kanban_manage to track project-level requirements and delivery. Conversation TODOs are execution steps, not project requirements. Never mark a project task accepted yourself. Do not start duplicate runs or alter a task currently being executed.",
+  "agentGuidance": "Use kanban_manage to track project-level requirements. Task-owned runs use kanban_report to explicitly submit analysis, delivery, review or a genuine blocker. Resolve questions using ask_user_question and wait for the user in the normal conversation. Speak naturally; never turn the whole conversation into JSON. Conversation TODOs are execution steps, not project requirements. Never mark a project task accepted yourself. Do not start duplicate runs or alter a task currently being executed.",
   "tools": [{
     "id": "kanban_manage",
     "title": "Manage project tasks",
@@ -42,6 +42,45 @@
         "text": {"type": "string", "minLength": 1, "maxLength": 10000}
       },
       "required": ["action"]
+    }
+  }, {
+    "id": "kanban_report",
+    "title": "Submit task report",
+    "description": "Submit this conversation's assigned task phase result. Task, phase, role and execution identity are bound by the host, not arguments. analysis: goal, scope, acceptanceCriteria, optional subtasks; delivery: summary, evidence, artifacts; review: summary, verdict passed/changes_requested, evidence; blocked: summary of a genuine obstacle. Resolve ordinary questions with ask_user_question, not blocked reports. Only submit after finishing work and checks; the board advances after this run ends successfully. Never accepts a task on behalf of the user. Finish with a readable conversational summary.",
+    "requiredPermissions": ["storage.read", "storage.write"],
+    "inputSchema": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "action": {"enum": ["analysis", "delivery", "review", "blocked"]},
+        "goal": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "scope": {"type": "string", "minLength": 1, "maxLength": 10000},
+        "acceptanceCriteria": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+        "subtasks": {"type": "array", "maxItems": 30, "items": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "title": {"type": "string", "minLength": 1, "maxLength": 200},
+            "description": {"type": "string", "minLength": 1, "maxLength": 10000},
+            "acceptanceCriteria": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 2000}}
+          }, "required": ["title", "description", "acceptanceCriteria"]
+        }},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 20000},
+        "verdict": {"enum": ["passed", "changes_requested"]},
+        "evidence": {"type": "array", "minItems": 1, "maxItems": 100, "items": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "label": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "result": {"enum": ["passed", "failed", "not_run"]},
+            "details": {"type": "string", "minLength": 1, "maxLength": 10000}
+          }, "required": ["label", "result", "details"]
+        }},
+        "artifacts": {"type": "array", "maxItems": 100, "items": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "title": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "path": {"type": "string", "minLength": 1, "maxLength": 2000}
+          }, "required": ["title", "path"]
+        }}
+      }, "required": ["action"]
     }
   }]
 }
