@@ -36,7 +36,7 @@ export class BoardEngine {
       for (const run of task.runs) {
         if (!run.target || run.conversationMode === "native") continue;
         try {
-          await this.runtime.prepare(run.target, task.title, false, {taskId: task.id, workbenchId: "modera.kanban.workbench", conversationMode: "native", ...(run.isolatedWorkspace ? {workspace: "git-worktree" as const} : {})});
+          await this.runtime.prepare(run.target, task.title, false, {taskId: task.id, workbenchId: "modera.kanban.workbench", conversationMode: "native", ...(run.isolatedWorkspace ? {workspace: "git-worktree" as const, checkout: "branch" as const} : {})});
           await this.store.update(state => { const attempt = taskById(state, task.projectId, task.id).runs.find(item => item.id === run.id); if (attempt) attempt.conversationMode = "native"; });
         } catch { /* Deleted or revoked conversations remain untouched, as does their history. */ }
       }
@@ -110,7 +110,7 @@ export class BoardEngine {
       await this.store.update(state => { const task = taskById(state, snapshot.projectId, snapshot.id); const run = currentRun(task); if (run?.id !== pending.id || run.state !== "queued") throw new Error("Task dispatch was cancelled"); run.state = "starting"; activity(task, "starting", run.phase + " starting"); }); this.changed();
       signal.throwIfAborted();
       const target = await this.runtime.target(snapshot.projectId, "", selection);
-      const prepared = await this.runtime.prepare(target, snapshot.title, true, {taskId: snapshot.id, workbenchId: "modera.kanban.workbench", conversationMode: "native", ...(isolated ? {workspace: "git-worktree" as const} : {})});
+      const prepared = await this.runtime.prepare(target, snapshot.title, true, {taskId: snapshot.id, workbenchId: "modera.kanban.workbench", conversationMode: "native", ...(isolated ? {workspace: "git-worktree" as const, checkout: "branch" as const} : {})});
       await this.store.update(state => { const task = taskById(state, snapshot.projectId, snapshot.id); const run = currentRun(task); if (run?.id !== pending.id || run.state !== "starting") throw new Error("Task dispatch was cancelled"); run.target = prepared; run.isolatedWorkspace = isolated; run.conversationMode = "native"; });
       signal.throwIfAborted();
       const started = await this.runtime.startRole(prepared, structuredClone(role), taskPrompt(snapshot, pending.phase), signal, {workflowTools: ["ask_user_question", "kanban_report"]});
