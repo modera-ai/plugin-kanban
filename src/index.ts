@@ -129,7 +129,7 @@ export const activate: PluginModule["activate"] = async host => {
     }],
     ui: [{
       id: "modera.kanban.workbench", slot: "workbench", frontend: "workbench",
-      workbench: {title: "Project board", icon: "box", order: -110, locales: {"zh-CN": {title: "项目看板"}}},
+      workbench: {title: "Project board", icon: "kanban", order: -110, locales: {"zh-CN": {title: "项目看板"}}},
       requiredPermissions: ["storage.read", "storage.write"],
       actions: ["refresh", "project", "create", "edit", "move", "comment", "analyze", "start", "review", "stop", "retry", "continue", "accept", "rework", "split", "archive", "restore", "delete", "settings", "saveRole", "removeRole"],
       async act(action, context, request) {
