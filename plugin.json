@@ -82,5 +82,6 @@
         }}
       }, "required": ["action"]
     }
-  }]
+  }],
+  "contributions": ["runCompleted", "sessionDeleted"]
 }
