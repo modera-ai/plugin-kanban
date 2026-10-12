@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "modera.kanban",
   "name": "Project board",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Project requirements, agent assignment, execution and review.",
   "author": "Modera",
   "category": "tasks",
