@@ -1,4 +1,9 @@
-import { AlertCircle, ArrowDown, ArrowUp, Equal, ChevronsUp, type LucideIcon } from "lucide-react";
+import { WarningCircleIcon as AlertCircle } from "@phosphor-icons/react/dist/csr/WarningCircle";
+import { ArrowDownIcon as ArrowDown } from "@phosphor-icons/react/dist/csr/ArrowDown";
+import { ArrowUpIcon as ArrowUp } from "@phosphor-icons/react/dist/csr/ArrowUp";
+import { EqualsIcon as Equal } from "@phosphor-icons/react/dist/csr/Equals";
+import { CaretDoubleUpIcon as ChevronsUp } from "@phosphor-icons/react/dist/csr/CaretDoubleUp";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { Button, Tooltip, useLabel, type ChoiceOption } from "@modera/ui";
 import type { AgentRole, BoardData, KanbanTask, TaskInput, TaskStatus, TaskType } from "../../src/types";
 
@@ -32,8 +37,8 @@ export function taskInput(task: KanbanTask): TaskInput {
 export function ErrorNotice({ message }: { message?: string }) {
   return message ? <div className="kb-error" role="alert"><AlertCircle size={16} aria-hidden /><span>{message}</span></div> : null;
 }
-export function IconButton({ label, icon: Icon, onClick, disabled, active }: { label: string; icon: LucideIcon; onClick(): void; disabled?: boolean; active?: boolean }) {
-  return <Tooltip content={label}><Button variant="quiet" size="icon" aria-label={label} aria-pressed={active} disabled={disabled} onClick={onClick}><Icon size={16} aria-hidden /></Button></Tooltip>;
+export function IconButton({ label, icon: Icon, onClick, disabled, active }: { label: string; icon: PhosphorIcon; onClick(): void; disabled?: boolean; active?: boolean }) {
+  return <Tooltip content={label}><Button variant="quiet" size="icon" aria-label={label} aria-pressed={active} disabled={disabled} onClick={onClick}><Icon size={16} weight={active ? "fill" : "regular"} aria-hidden /></Button></Tooltip>;
 }
 export function Priority({ value }: { value: KanbanTask["priority"] }) {
   const t = useLabel(), Icon = ({ urgent: ChevronsUp, high: ArrowUp, normal: Equal, low: ArrowDown })[value];

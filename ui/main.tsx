@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { mountPlugin, frontend, usePluginSnapshot } from "@modera/plugin-sdk/react";
 import { Button, Combobox, Dialog, Input, MultiSelect, Tabs, TabsList, TabsTrigger, UiProvider, useLabel } from "@modera/ui";
-import { Archive, CheckCircle2, Circle, FilterX, KanbanSquare, LayoutList, LoaderCircle, Plus, RefreshCw, Search, Settings2, Users, X } from "lucide-react";
+import { ArchiveIcon as Archive } from "@phosphor-icons/react/dist/csr/Archive";
+import { CheckCircleIcon as CheckCircle2 } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { CircleIcon as Circle } from "@phosphor-icons/react/dist/csr/Circle";
+import { FunnelXIcon as FilterX } from "@phosphor-icons/react/dist/csr/FunnelX";
+import { KanbanIcon as KanbanSquare } from "@phosphor-icons/react/dist/csr/Kanban";
+import { ListIcon as LayoutList } from "@phosphor-icons/react/dist/csr/List";
+import { SpinnerGapIcon as LoaderCircle } from "@phosphor-icons/react/dist/csr/SpinnerGap";
+import { PlusIcon as Plus } from "@phosphor-icons/react/dist/csr/Plus";
+import { ArrowsClockwiseIcon as RefreshCw } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
+import { MagnifyingGlassIcon as Search } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { SlidersIcon as Settings2 } from "@phosphor-icons/react/dist/csr/Sliders";
+import { UsersIcon as Users } from "@phosphor-icons/react/dist/csr/Users";
+import { XIcon as X } from "@phosphor-icons/react/dist/csr/X";
 import { statuses, type BoardData, type KanbanTask, type TaskStatus } from "../src/types";
 import { ErrorNotice, IconButton, Priority, Status, moveOptions, options, priorityNames, roleName, statusNames, taskTypes, typeNames, unique } from "./components/shared";
 import { TaskDetails } from "./components/details";
@@ -88,7 +100,7 @@ function Kanban() {
         <div className="kb-heading"><KanbanSquare size={22} aria-hidden /><h1>{t("看板", "Kanban")}</h1>{data?.projects.length === 1 ? <span className="kb-project-name">{data.projects[0].name === "Default" && zh ? "默认项目" : data.projects[0].name}</span> : <Combobox className="kb-project" size="small" label={t("项目", "Project")} value={data?.projectId ?? ""} disabled={busy || !data} options={(data?.projects ?? []).map(project => ({ value: project.id, label: zh && project.id === "default" && project.name === "Default" ? "默认项目" : project.name }))} onValueChange={id => { if (id !== data?.projectId) void act("project", id); }} />}</div>
         <div className="kb-header-actions"><IconButton label={t("刷新", "Refresh")} icon={RefreshCw} disabled={busy} onClick={() => void act("refresh")} /><IconButton label={t("角色管理", "Roles")} icon={Users} disabled={!data || busy} onClick={() => { setError(""); setRoles(true); }} /><IconButton label={t("看板设置", "Board settings")} icon={Settings2} disabled={!data || busy} onClick={() => { setError(""); setSettings(true); }} /><Button size="small" variant="primary" disabled={!data || busy} onClick={() => newTask()}><Plus size={15} aria-hidden /><span>{t("新建任务", "New task")}</span></Button></div>
       </header>
-      <div className="kb-toolbar"><Tabs size="small" variant="segment" value={view} onValueChange={setView}><TabsList aria-label={t("视图", "View")}><TabsTrigger value="board"><KanbanSquare size={14} aria-hidden />{t("看板", "Board")}</TabsTrigger><TabsTrigger value="list"><LayoutList size={14} aria-hidden />{t("列表", "List")}</TabsTrigger></TabsList></Tabs><span className="kb-total">{filtered.length} / {shown.length}</span><Input className="kb-search" label={t("搜索任务", "Search tasks")} hideLabel value={query} onChange={setQuery} placeholder={t("搜索任务", "Search tasks")} leftIcon={<Search size={15} aria-hidden />} /><IconButton label={t("归档任务", "Archived tasks")} icon={Archive} active={archived} onClick={() => setArchived(!archived)} /></div>
+      <div className="kb-toolbar"><Tabs size="small" variant="segment" value={view} onValueChange={setView}><TabsList aria-label={t("视图", "View")}><TabsTrigger value="board"><KanbanSquare size={14} weight={view === "board" ? "fill" : "regular"} aria-hidden />{t("看板", "Board")}</TabsTrigger><TabsTrigger value="list"><LayoutList size={14} weight={view === "list" ? "fill" : "regular"} aria-hidden />{t("列表", "List")}</TabsTrigger></TabsList></Tabs><span className="kb-total">{filtered.length} / {shown.length}</span><Input className="kb-search" label={t("搜索任务", "Search tasks")} hideLabel value={query} onChange={setQuery} placeholder={t("搜索任务", "Search tasks")} leftIcon={<Search size={15} aria-hidden />} /><IconButton label={t("归档任务", "Archived tasks")} icon={Archive} active={archived} onClick={() => setArchived(!archived)} /></div>
       <div className="kb-filters" aria-label={t("筛选", "Filters")}>
         <Combobox size="small" label={t("状态", "Status")} placeholder={t("全部状态", "All statuses")} value={filters.status} options={[{ value: "", label: t("全部状态", "All statuses") }, ...options(statuses, names)]} onValueChange={value => filter("status", value)} />
         <Combobox size="small" label={t("类型", "Type")} placeholder={t("全部类型", "All types")} value={filters.type} options={[{ value: "", label: t("全部类型", "All types") }, ...options(taskTypes, types)]} onValueChange={value => filter("type", value)} />

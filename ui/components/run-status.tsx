@@ -1,6 +1,7 @@
 import { frontend } from "@modera/plugin-sdk/react";
 import { Button, useLabel } from "@modera/ui";
-import { LoaderCircle, MessageSquare } from "lucide-react";
+import { SpinnerGapIcon as LoaderCircle } from "@phosphor-icons/react/dist/csr/SpinnerGap";
+import { ChatIcon as MessageSquare } from "@phosphor-icons/react/dist/csr/Chat";
 import type { KanbanTask, TaskRun } from "../../src/types";
 import type { Translate } from "./shared";
 

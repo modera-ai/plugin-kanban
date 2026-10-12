@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { Button, Combobox, Dialog, Input, MultiSelect, Textarea, ToggleRow, useLabel } from "@modera/ui";
-import { Check, Copy, Pencil, Plus, Save, Trash2, Users } from "lucide-react";
+import { CheckIcon as Check } from "@phosphor-icons/react/dist/csr/Check";
+import { CopyIcon as Copy } from "@phosphor-icons/react/dist/csr/Copy";
+import { PencilIcon as Pencil } from "@phosphor-icons/react/dist/csr/Pencil";
+import { PlusIcon as Plus } from "@phosphor-icons/react/dist/csr/Plus";
+import { FloppyDiskIcon as Save } from "@phosphor-icons/react/dist/csr/FloppyDisk";
+import { TrashIcon as Trash2 } from "@phosphor-icons/react/dist/csr/Trash";
+import { UsersIcon as Users } from "@phosphor-icons/react/dist/csr/Users";
 import { statuses, type AgentRole, type BoardData, type BoardSettings, type KanbanTask, type ModelSelection, type TaskInput } from "../../src/types";
 import { ErrorNotice, IconButton, lines, options, pickerOpen, priorities, priorityNames, roleOptions, taskInput, taskTypes, typeNames, unique, statusNames, type Action } from "./shared";
 

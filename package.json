@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@modera/ui": "file:vendor/modera-ui-0.1.0.tgz",
+    "@phosphor-icons/react": "^2.1.10",
     "lucide-react": "^1.17.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
